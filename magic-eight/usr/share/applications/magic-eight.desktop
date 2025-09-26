@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Magic Eight
+Comment=Sihirli Sekiz Topu oyunu
+Exec=python3 /usr/share/magic-eight/magiceight.py
+Icon=magic_eight
+Type=Application
+Categories=Game;Utility;
+Terminal=false

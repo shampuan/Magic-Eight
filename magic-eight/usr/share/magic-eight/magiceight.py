@@ -1,0 +1,298 @@
+import gi
+import os
+import random
+import pygame.mixer
+import ctypes
+import locale
+
+# Burası dil ayarlarıyla ilgili
+try:
+    locale.setlocale(locale.LC_ALL, '')
+except locale.Error:
+    pass
+
+# GTK4 kütüphanesinin içe aktarımı
+gi.require_version('Gtk', '4.0')
+from gi.repository import Gtk, Gdk, GLib, Pango, Gio
+
+app = Gtk.Application(application_id="org.example.magiceight")
+
+# GTK uygulaması sınıfı
+class MagicEightApp(Gtk.Application):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.connect('activate', self.on_activate)
+
+        self.project_name = "magic_eight"
+        self.resource_dir = "guithings"
+        self.image_icon_name = "magic_eight.png"
+        self.image_ball_name = "layer.png"
+        self.audio_file_name = "magic8.wav"
+        self.image_ball_size = 375
+        
+        # Orijinal Magic 8-Ball yanıtları
+        self.answers_en = [
+            "It is certain.", "It is decidedly so.", "Without a doubt.", 
+            "Yes - definitely.", "You may rely on it.", "As I see it, yes.", 
+            "Most likely.", "Outlook good.", "Signs point to yes.", "Yes.",
+            "Don't count on it.", "My reply is no.", "My sources say no.", 
+            "Outlook not so good.", "Very doubtful.",
+            "Reply hazy, try again.", "Ask again later.", 
+            "Better not tell you now.", "Cannot predict now.", 
+            "Concentrate and ask again."
+        ]
+        
+        self.answers_tr = [
+            "Kesinlikle öyle.", "Hiç şüphesiz.", "Evet - kesinlikle.", 
+            "Ona güvenebilirsin.", "Benim gördüğüm kadarıyla, evet.", 
+            "Büyük ihtimalle.", "Görünüm iyi.", "İşaretler eveti gösteriyor.", "Evet.",
+            "Buna güvenme.", "Cevabım hayır.", "Kaynaklarım hayır diyor.", 
+            "Görünüm pek iyi değil.", "Çok şüpheli.",
+            "Cevap belirsiz, tekrar dene.", "Daha sonra tekrar sor.", 
+            "Şimdi sana söylemesem daha iyi.", "Şimdi tahmin edemiyorum.", 
+            "Odaklan ve tekrar sor."
+        ]
+
+        # Uygulama metinleri
+        self.texts = {
+            'en': {
+                'window_title': "Magic Eight",
+                'entry_placeholder': "Type your question here...",
+                'button_label': "Get Answer",
+                'answer_tooltip': "The answer text will appear here.",
+                'error_message': "Please enter a question.",
+                'about_title': "About Magic Eight",
+                'about_comments': "This program is for entertainment purposes only. Do not make your decisions based on this program.\n\nThis program comes with no warranty.",
+                'about_license': "GNU GPLv3",
+                'about_version': "1.0.1",
+                'about_website': "https://www.github.com/shampuan",
+                'about_author': "A. Serhat Kılıçoğlu"
+            },
+            'tr': {
+                'window_title': "Magic Eight",
+                'entry_placeholder': "Sorunuzu buraya yazın...",
+                'button_label': "Yanıtı Al",
+                'answer_tooltip': "Yanıt metni burada görünecek.",
+                'error_message': "Lütfen bir soru girin.",
+                'about_title': "Magic Eight Hakkında",
+                'about_comments': "Bu program sadece oyun amaçlıdır. Kararlarınızı bu programa göre almayın.\n\nBu program hiçbir garanti getirmez.",
+                'about_license': "GNU GPLv3",
+                'about_version': "1.0.1",
+                'about_website': "https://www.github.com/shampuan",
+                'about_author': "A. Serhat Kılıçoğlu"
+            }
+        }
+
+        # Varsayılan dil
+        self.current_lang = 'en'
+    
+    # Kapsamlı dosya bulma metodu
+    def find_file(self, filename):
+        # 1. /usr/share/magiceight/guithings klasöründen çekmesi için
+        install_path = os.path.join(
+            os.path.abspath(os.sep), "usr", "share", self.project_name, self.resource_dir, filename
+        )
+        if os.path.exists(install_path):
+            return install_path
+        
+        # 2. Bulamazsa kendi dizininde arasın (geliştirme aşaması)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        local_path = os.path.join(script_dir, self.resource_dir, filename)
+        if os.path.exists(local_path):
+            return local_path
+
+        # 3. Bulunamazsa None döndür
+        return None
+
+    # Pencereyi aktif hale getirme
+    def on_activate(self, app):
+        # Ana pencereyi oluşturma
+        self.window = Gtk.ApplicationWindow(application=app)
+        
+        # GTK4 Stili Düzeltme: Gtk.HeaderBar kullan eskisi iyi değildi
+        self.header_bar = Gtk.HeaderBar.new()
+        self.window.set_titlebar(self.header_bar)
+        
+        # Pencere varsayılan ayarları
+        self.window.set_default_size(self.image_ball_size + 50, self.image_ball_size + 150)
+        self.window.set_resizable(False)
+
+        # Program ikonunu ayarla
+        # HATA DÜZELTMESİ: İkon, pencereye değil, doğrudan uygulamaya atanır.
+        # Bu, GTK4'te önerilen yöntemdir.
+        # Uygulama ikonunu standart bir ikonla ayarla
+        self.window.set_icon_name("magic_eight")
+
+        # Hakkında penceresi ikonunu ayarla
+        icon_path = self.find_file(self.image_icon_name)
+        if icon_path:
+            self.about_dialog_icon = Gdk.Texture.new_from_file(Gio.File.new_for_path(icon_path))
+        else:
+            self.about_dialog_icon = None
+
+        # HeaderBar'a menü butonu ekledik sorun verirse değiştircez. 
+        menu_button = Gtk.MenuButton()
+        # Daha güvenli bir ikon ismi kullanıldı.
+        menu_button.set_icon_name("list-add-symbolic") 
+        self.header_bar.pack_end(menu_button)
+        
+        # Popover menüsü oluşturduk
+        self.popover = Gtk.Popover.new() 
+        popover_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.popover.set_child(popover_box)
+        
+        # Dil değiştirme butonu
+        # Sadece iki dil arasında gidip gelecek ve uygulama içinden çağırılacak
+        lang_button = Gtk.Button(label="Language") # Evrensel bir sözcük olduğu için çeviriye dahil etmedim. 
+        lang_button.set_margin_top(5)
+        lang_button.set_margin_bottom(5)
+        lang_button.connect("clicked", self.on_language_button_clicked)
+        popover_box.append(lang_button)
+        
+        # Hakkında butonu
+        about_button = Gtk.Button(label="About")
+        about_button.set_margin_top(5)
+        about_button.set_margin_bottom(5)
+        about_button.connect("clicked", self.on_about_button_clicked)
+        popover_box.append(about_button)
+
+        menu_button.set_popover(self.popover)
+
+        # Ana dikey kutuyu (VBox) oluştur
+        main_box = Gtk.Box.new(Gtk.Orientation.VERTICAL, 10)
+        main_box.set_margin_top(20)
+        main_box.set_margin_bottom(20)
+        main_box.set_margin_start(20)
+        main_box.set_margin_end(20)
+        self.window.set_child(main_box)
+
+        # Bilardo topu resmini yükle
+        image_ball_path = self.find_file(self.image_ball_name)
+        if image_ball_path:
+            self.image_ball = Gtk.Image.new_from_file(image_ball_path)
+            self.image_ball.set_size_request(self.image_ball_size, self.image_ball_size)
+        else:
+            self.image_ball = Gtk.Label(label="layer.png not found.")
+        
+        # Üst üste bindirme (overlay) oluştur
+        self.overlay = Gtk.Overlay()
+        self.overlay.set_child(self.image_ball)
+        
+        # Metin etiketini topun üzerine yerleştir
+        self.answer_label = Gtk.Label(label="")
+        self.answer_label.set_wrap(True)
+        self.answer_label.set_justify(Gtk.Justification.CENTER)
+        self.answer_label.set_max_width_chars(15) 
+
+        # Yanıt metninin stilini ayarla
+        pango_attr = Pango.AttrList.new()
+        pango_attr.insert(Pango.attr_family_new("Arial"))
+        pango_attr.insert(Pango.attr_size_new(12 * Pango.SCALE)) 
+        pango_attr.insert(Pango.attr_foreground_new(0xFFFF, 0xFFFF, 0xFFFF)) 
+        self.answer_label.set_attributes(pango_attr)
+        
+        self.overlay.add_overlay(self.answer_label)
+        self.answer_label.set_halign(Gtk.Align.CENTER)
+        self.answer_label.set_valign(Gtk.Align.CENTER)
+        
+        main_box.append(self.overlay)
+        
+        # Giriş metin kutusunu oluştur
+        self.entry = Gtk.Entry()
+        main_box.append(self.entry)
+        
+        # Butonu oluştur
+        self.get_answer_button = Gtk.Button()
+        self.get_answer_button.add_css_class("suggested-action")
+        self.get_answer_button.connect("clicked", self.on_button_clicked)
+        main_box.append(self.get_answer_button)
+
+        # Metinleri başlangıç diline göre güncelle
+        # Bu özellik tam istediğim gibi çalışmıyor yanıtı sıfırlıyor boşver böyle kalsın
+        self.update_ui_texts()
+        
+        # Pygame mixer'ı başlatalım ses çalsın
+        try:
+            pygame.mixer.init()
+            self.sound_file = self.find_file(self.audio_file_name)
+            if self.sound_file:
+                self.sound = pygame.mixer.Sound(self.sound_file)
+            else:
+                self.sound = None
+                print("Ses dosyası bulunamadı.")
+        except pygame.error as e:
+            print(f"Pygame mixer başlatılırken hata oluştu: {e}")
+            self.sound = None
+
+        self.window.present()
+
+    def update_ui_texts(self):
+        """Arayüz metinlerini mevcut dile göre günceller."""
+        texts = self.texts[self.current_lang]
+        
+        # Başlık çubuğunu güncelle
+        title_label = Gtk.Label(label=texts['window_title'])
+        self.header_bar.set_title_widget(title_label)
+
+        # Diğer metinleri güncelle
+        self.entry.set_placeholder_text(texts['entry_placeholder'])
+        self.get_answer_button.set_label(texts['button_label'])
+        self.answer_label.set_tooltip_text(texts['answer_tooltip'])
+        self.get_answer_button.set_tooltip_text(texts['answer_tooltip'])
+
+    def on_language_button_clicked(self, widget):
+        """Dil değiştirme butonuna basıldığında çağrılır."""
+        self.current_lang = 'tr' if self.current_lang == 'en' else 'en'
+        self.update_ui_texts()
+        self.answer_label.set_text("") # Yanıt etiketini temizle
+        self.popover.popdown() # Popover'ı doğru şekilde kapat
+
+    def on_about_button_clicked(self, widget):
+        """Hakkında butonuna basıldığında çağrılır."""
+        texts = self.texts[self.current_lang]
+        about_dialog = Gtk.AboutDialog.new()
+        about_dialog.set_program_name(texts['window_title'])
+        about_dialog.set_comments(texts['about_comments'])
+        about_dialog.set_version(texts['about_version'])
+        about_dialog.set_license(texts['about_license'])
+        about_dialog.set_authors([texts['about_author']]) 
+        about_dialog.set_website(texts['about_website'])
+        about_dialog.set_website_label("GitHub")
+        
+        # İkonu ayarla
+        if self.about_dialog_icon:
+            about_dialog.set_logo(self.about_dialog_icon)
+        else:
+            about_dialog.set_logo_icon_name("image-missing")
+
+        about_dialog.set_transient_for(self.window)
+        about_dialog.set_modal(True)
+        about_dialog.present()
+        self.popover.popdown() # Popover'ı doğru şekilde kapat
+
+    def on_button_clicked(self, widget):
+        # Soruyu al
+        question = self.entry.get_text()
+        if not question:
+            self.answer_label.set_text(self.texts[self.current_lang]['error_message'])
+            return
+
+        # Sesi çal
+        if self.sound:
+            self.sound.play()
+        
+        # Rastgele bir yanıt seç
+        if self.current_lang == 'en':
+            answer = random.choice(self.answers_en)
+        else:
+            answer = random.choice(self.answers_tr)
+        
+        # Etiketi güncelle
+        self.answer_label.set_text(answer)
+        print(f"Soru: {question}, Cevap: {answer}")
+
+# Uygulamayı başlat
+if __name__ == "__main__":
+    app = MagicEightApp(application_id="com.example.magiceight")
+    app.run(None)
+
